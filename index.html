@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI木工 - アイデアから設計図まで全自動生成</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
+    <style>
+        :root {
+            --wood-color: #d4a373;
+            --wood-dark: #8c5e3c;
+            --bg-color: #fdfcf0;
+            --accent: #2e8b57;
+        }
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: var(--wood-dark);
+            text-align: center;
+            border-bottom: 3px solid var(--wood-color);
+            padding-bottom: 10px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: var(--wood-dark);
+        }
+        input[type="number"], input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .btn-generate {
+            width: 100%;
+            padding: 15px;
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn-generate:hover {
+            background-color: #256d44;
+        }
+        .btn-generate:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        /* 結果表示エリア */
+        #result-area {
+            display: none; /* 初期は非表示 */
+            margin-top: 30px;
+            border-top: 2px dashed var(--wood-color);
+            padding-top: 20px;
+        }
+        .blueprint-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .project-title {
+            font-size: 1.5rem;
+            color: var(--accent);
+            margin-top: 0;
+        }
+        .svg-container {
+            text-align: center;
+            margin: 20px 0;
+            background: #f9f9f9;
+            padding: 10px;
+            border: 1px solid #eee;
+        }
+        .svg-container svg {
+            max-width: 100%;
+            height: auto;
+            max-height: 300px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: var(--wood-color);
+            color: white;
+        }
+        /* 簡易木取り図（Canvas） */
+        #layout-canvas {
+            width: 100%;
+            border: 2px solid #333;
+            background-color: #f0e6d2; /* 板の色 */
+            margin-top: 20px;
+        }
+        .loading {
+            text-align: center;
+            font-weight: bold;
+            color: var(--accent);
+            display: none;
+        }
+        .api-note {
+            font-size: 0.8rem;
+            color: #666;
+            background: #eee;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>AI木工（ベータ版）</h1>
+        <p>手元の板サイズを入力すると、AIが「作れる家具」を提案し、設計図と木取り図を自動生成します。</p>
+
+        <div class="api-note">
+            <strong>⚠️ APIキーが必要です</strong><br>
+            このアプリはGoogle Gemini APIを使用します。<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で無料のAPIキーを取得し、以下に入力してください。<br>
+            ※キーはブラウザ内にのみ保存されます。
+        </div>
+
+        <div class="input-group">
+            <label>Gemini APIキー</label>
+            <input type="password" id="api-key" placeholder="AIzaSy...">
+        </div>
+
+        <div class="input-group">
+            <label>板の幅 (mm)</label>
+            <input type="number" id="board-w" value="1820">
+        </div>
+        <div class="input-group">
+            <label>板の高さ (mm)</label>
+            <input type="number" id="board-h" value="910">
+        </div>
+        
+        <button class="btn-generate" id="btn-run">AIにアイデアを考えてもらう 🪄</button>
+        
+        <div class="loading" id="loading-msg">
+            🔨 AI親方が設計中...<br>「へい、ちょっと待ってな！今いい図面引くからよ！」
+        </div>
+
+        <div id="result-area">
+            <div class="blueprint-card">
+                <h2 class="project-title" id="out-title"></h2>
+                <p id="out-desc"></p>
+                
+                <h3>📷 完成イメージ（ポンチ絵）</h3>
+                <div class="svg-container" id="out-svg">
+                    </div>
+
+                <h3>📋 部材リスト</h3>
+                <table id="parts-table">
+                    <thead>
+                        <tr>
+                            <th>部品名</th>
+                            <th>幅(mm)</th>
+                            <th>高さ(mm)</th>
+                            <th>枚数</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+
+                <h3>📐 簡易木取り図（イメージ）</h3>
+                <p style="font-size:0.9rem;">※赤線はカットライン。簡易計算のため、実際の「板の木取」アプリより精度は劣ります。</p>
+                <canvas id="layout-canvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+
+        const btn = document.getElementById('btn-run');
+        const loading = document.getElementById('loading-msg');
+        const resultArea = document.getElementById('result-area');
+        const apiKeyInput = document.getElementById('api-key');
+
+        // ローカルストレージからAPIキーを読み込む
+        const savedKey = localStorage.getItem('gemini_api_key');
+        if(savedKey) apiKeyInput.value = savedKey;
+
+        btn.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+            const boardW = parseInt(document.getElementById('board-w').value);
+            const boardH = parseInt(document.getElementById('board-h').value);
+
+            if(!apiKey) {
+                alert('APIキーを入力してください');
+                return;
+            }
+            // キーを保存
+            localStorage.setItem('gemini_api_key', apiKey);
+
+            // UI切り替え
+            btn.disabled = true;
+            loading.style.display = 'block';
+            resultArea.style.display = 'none';
+
+            try {
+                // 1. AIへの注文（プロンプト作成）
+                const prompt = `
+                    あなたは熟練の木工職人です。
+                    ユーザーの手元に【幅${boardW}mm × 高さ${boardH}mm】の板が1枚あります。
+                    この板1枚から切り出せる、実用的でシンプルな木工作品を1つ考案してください。
+                    
+                    【条件】
+                    - 複雑な曲線カットは無し。直線カットのみ。
+                    - 部材の合計面積が、板の面積の85%以下になるようにすること（切り代や端材を考慮）。
+                    - 出力は必ず以下のJSON形式のみで行うこと（Markdown記法は不要）。
+                    
+                    【JSONフォーマット】
+                    {
+                        "title": "作品名",
+                        "description": "どんな作品か簡潔な説明（30文字程度）",
+                        "svg_icon": "作品の完成形をイメージしたシンプルなSVGコード（<svg viewBox='0 0 100 100'>...</svg>の形式。色はモノクロまたは木の色で）",
+                        "parts": [
+                            {"name": "側板", "w": 200, "h": 500, "count": 2},
+                            {"name": "棚板", "w": 200, "h": 300, "count": 3}
+                        ]
+                    }
+                `;
+
+                // 2. Gemini API呼び出し
+                const genAI = new GoogleGenerativeAI(apiKey);
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+                const result = await model.generateContent(prompt);
+                const response = await result.response;
+                let text = response.text();
+
+                // JSONの整形（Markdownの```json等を削除）
+                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const data = JSON.parse(text);
+
+                // 3. 結果の表示
+                document.getElementById('out-title').innerText = data.title;
+                document.getElementById('out-desc').innerText = data.description;
+                document.getElementById('out-svg').innerHTML = data.svg_icon;
+
+                // 部材テーブル描画
+                const tbody = document.querySelector('#parts-table tbody');
+                tbody.innerHTML = '';
+                let allParts = []; // 木取り計算用フラット配列
+
+                data.parts.forEach(part => {
+                    const row = `<tr>
+                        <td>${part.name}</td>
+                        <td>${part.w}</td>
+                        <td>${part.h}</td>
+                        <td>${part.count}</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+
+                    // 木取り計算用に展開
+                    for(let i=0; i<part.count; i++){
+                        allParts.push({ w: part.w, h: part.h, name: part.name });
+                    }
+                });
+
+                // 4. 簡易木取り計算＆描画（キャンバス）
+                drawLayout(boardW, boardH, allParts);
+
+                resultArea.style.display = 'block';
+
+            } catch (error) {
+                console.error(error);
+                alert('エラーが発生しました: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+
+        // --- 簡易木取りアルゴリズム（Shelf法的なもの） ---
+        function drawLayout(boardW, boardH, parts) {
+            const canvas = document.getElementById('layout-canvas');
+            // 描画倍率の計算（キャンバス幅を基準に調整）
+            const maxDisplayWidth = canvas.parentElement.clientWidth;
+            const scale = maxDisplayWidth / boardW;
+            
+            canvas.width = boardW * scale;
+            canvas.height = boardH * scale;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.scale(scale, scale);
+
+            // 背景（板）
+            ctx.fillStyle = '#f0e6d2';
+            ctx.fillRect(0, 0, boardW, boardH);
+            ctx.strokeStyle = '#8c5e3c';
+            ctx.lineWidth = 2 / scale;
+            ctx.strokeRect(0, 0, boardW, boardH);
+
+            // 部材を大きい順にソート（高さ優先）
+            parts.sort((a, b) => b.h - a.h);
+
+            let currentX = 0;
+            let currentY = 0;
+            let rowMaxH = 0;
+            const KERF = 5; // ノコ幅
+
+            ctx.font = `${Math.max(12, 200/scale)}px Arial`;
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#c0392b'; // カット線は赤
+            ctx.lineWidth = 2 / scale;
+
+            parts.forEach(part => {
+                // 1. そのまま配置できるか？
+                if (currentX + part.w > boardW) {
+                    // 次の行へ
+                    currentX = 0;
+                    currentY += rowMaxH + KERF;
+                    rowMaxH = 0;
+                }
+
+                // 2. 高さ（Y）がはみ出すなら配置不可
+                if (currentY + part.h > boardH) {
+                    // 入らない！（エラー描画などは省略し、スキップ）
+                    console.log("配置不可:", part.name);
+                    return; 
+                }
+
+                // 描画
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(currentX, currentY, part.w, part.h);
+                ctx.strokeRect(currentX, currentY, part.w, part.h);
+
+                // 文字
+                ctx.fillStyle = '#333';
+                // 文字が小さくなりすぎないように調整
+                if(part.w > 50 && part.h > 20) {
+                   ctx.fillText(part.name, currentX + 5, currentY + 20);
+                }
+
+                // 次の位置へ更新
+                currentX += part.w + KERF;
+                if (part.h > rowMaxH) rowMaxH = part.h;
+            });
+        }
+    </script>
+</body>
+</html>
