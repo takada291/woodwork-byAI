@@ -329,9 +329,9 @@
                     }
                 });
 
-                drawLayout(boardW, boardH, allParts);
                 resultArea.style.display = 'block';
-
+                drawLayout(boardW, boardH, allParts);
+                
             } catch (error) {
                 console.error(error);
                 alert('エラーが発生しました: ' + error.message + '\n\nAPIキーが正しいか、Google AI Studioで有効か確認してください。');
@@ -396,3 +396,4 @@
     </script>
 </body>
 </html>
+
