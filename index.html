@@ -324,8 +324,13 @@
                         <td>${part.count}</td>
                     </tr>`;
                     tbody.innerHTML += row;
+                    // 木取り計算用に展開
                     for(let i=0; i<part.count; i++){
-                        allParts.push({ w: part.w, h: part.h, name: part.name });
+                        // ★追加：詰め込みやすくするため、自動で「縦長」に回転させる！
+                        let fw = part.w, fh = part.h;
+                        if (fw > fh) { [fw, fh] = [fh, fw]; } // 幅の方が広ければ入れ替え
+
+                        allParts.push({ w: fw, h: fh, name: part.name });
                     }
                 });
 
@@ -396,6 +401,7 @@
     </script>
 </body>
 </html>
+
 
 
 
