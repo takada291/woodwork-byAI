@@ -166,11 +166,12 @@
 
     <div class="container">
         <h1>AI木工 v0.3</h1>
-        <p>作りたいものと材料を入力すると、AIが3Dイメージ図と木取り図を提案します。</p>
+        <p>作りたいもの・木材の寸法を入力すると’AI親方’が3Dイメージ図・木取り図のラフ案を作成します！</p>
 
         <div class="api-note">
             <strong>⚠️ APIキーが必要です</strong><br>
-            Google Gemini APIキーを入力してください（ブラウザ内にのみ保存されます）。
+            Google Gemini APIキーを入力してください。他の人と共有しないでください。
+            <br>→<a href="https://j-aic.com/techblog/google-ai-studio-api-free-202511" target="_blank" rel="noopener noreferrer">こちらのサイトがわかりやすいです。</a>
         </div>
 
         <div class="input-group">
@@ -179,13 +180,13 @@
         </div>
 
         <div class="input-group">
-            <label>作りたいもの（例：子供用の椅子、本棚、キャンプ用テーブル）</label>
-            <input type="text" id="user-topic" placeholder="例：頑丈な踏み台">
+            <label>作りたいもの（例：子供用の本棚、しっかりした踏み台etc.）</label>
+            <input type="text" id="user-topic" placeholder="例：子供用の本棚">
         </div>
 
         <div class="input-row">
             <div class="input-group">
-                <label>材料の厚み (mm)</label>
+                <label>木材の厚み (mm)</label>
                 <input type="number" id="board-d" value="12" placeholder="例: 12, 24, 38">
             </div>
             <div class="input-group" style="visibility: hidden;"></div>
@@ -193,11 +194,11 @@
 
         <div class="input-row">
             <div class="input-group">
-                <label>材料の幅/長さ (mm)</label>
+                <label>木材の幅/長さ (mm)</label>
                 <input type="number" id="board-w" value="1820" placeholder="長い方の寸法">
             </div>
             <div class="input-group">
-                <label>材料の高さ/巾 (mm)</label>
+                <label>木材の高さ/巾 (mm)</label>
                 <input type="number" id="board-h" value="910" placeholder="短い方の寸法">
             </div>
         </div>
@@ -205,7 +206,7 @@
         <button class="btn-generate" id="btn-run">AI親方に相談する 🪄</button>
         
         <div class="loading" id="loading-msg">
-            🔨 AI親方が設計中...<br>
+            🔨 AI親方が設計中（時間がかかるよ！）...<br>
             <span id="loading-detail" class="status-log">準備中...</span>
         </div>
 
@@ -231,7 +232,7 @@
                 </table>
 
                 <h3>📐 簡易木取り図</h3>
-                <p style="font-size:0.9rem;">※赤線はカットライン。簡易計算のため精度は目安です。</p>
+                <p style="font-size:0.9rem;">※赤線はカットラインの目安です。’板の木取’アプリで木取りが正確かチェックしてください！</p>
                 <canvas id="layout-canvas"></canvas>
             </div>
         </div>
@@ -446,4 +447,5 @@
     </script>
 </body>
 </html>
+
 
