@@ -57,7 +57,7 @@
             color: var(--wood-dark);
             font-size: 0.9rem;
         }
-        input[type="number"], input[type="text"], input[type="password"], select {
+        input[type="number"], input[type="text"], input[type="password"] {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
@@ -105,14 +105,19 @@
         .svg-container {
             text-align: center;
             margin: 20px 0;
-            background: #f9f9f9;
-            padding: 10px;
+            background: #fff; /* 背景白で見やすく */
+            padding: 20px;
             border: 1px solid #eee;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .svg-container svg {
             max-width: 100%;
             height: auto;
-            max-height: 300px;
+            max-height: 350px;
+            filter: drop-shadow(5px 5px 5px rgba(0,0,0,0.1)); /* 影をつけて立体感アップ */
         }
         table {
             width: 100%;
@@ -160,8 +165,8 @@
 <body>
 
     <div class="container">
-        <h1>AI木工 v0.2</h1>
-        <p>作りたいものと材料を入力すると、AIが設計図と木取り図を提案します。</p>
+        <h1>AI木工 v0.3</h1>
+        <p>作りたいものと材料を入力すると、AIが3Dイメージ図と木取り図を提案します。</p>
 
         <div class="api-note">
             <strong>⚠️ APIキーが必要です</strong><br>
@@ -174,22 +179,16 @@
         </div>
 
         <div class="input-group">
-            <label>作りたいもの（例：子供用の椅子、本棚、おまかせ）</label>
+            <label>作りたいもの（例：子供用の椅子、本棚、キャンプ用テーブル）</label>
             <input type="text" id="user-topic" placeholder="例：頑丈な踏み台">
         </div>
 
         <div class="input-row">
             <div class="input-group">
-                <label>材料の種類</label>
-                <select id="material-type">
-                    <option value="board">板材 (合板など)</option>
-                    <option value="timber">角材 (2x4など)</option>
-                </select>
-            </div>
-            <div class="input-group">
                 <label>材料の厚み (mm)</label>
-                <input type="number" id="board-d" value="12">
+                <input type="number" id="board-d" value="12" placeholder="例: 12, 24, 38">
             </div>
+            <div class="input-group" style="visibility: hidden;"></div>
         </div>
 
         <div class="input-row">
@@ -215,7 +214,7 @@
                 <h2 class="project-title" id="out-title"></h2>
                 <p id="out-desc"></p>
                 
-                <h3>📷 完成イメージ</h3>
+                <h3>📷 完成イメージ（3D鳥観図）</h3>
                 <div class="svg-container" id="out-svg"></div>
 
                 <h3>📋 部材リスト</h3>
@@ -247,9 +246,7 @@
         const resultArea = document.getElementById('result-area');
         const apiKeyInput = document.getElementById('api-key');
         
-        // 入力項目の取得
         const topicInput = document.getElementById('user-topic');
-        const matTypeInput = document.getElementById('material-type');
         const depthInput = document.getElementById('board-d');
 
         const savedKey = localStorage.getItem('gemini_api_key');
@@ -287,11 +284,9 @@
             const apiKey = apiKeyInput.value.trim();
             const boardW = parseInt(document.getElementById('board-w').value);
             const boardH = parseInt(document.getElementById('board-h').value);
-            const boardD = parseInt(depthInput.value);
+            const boardD = parseInt(depthInput.value) || 12; // 未入力なら12mm
             const userTopic = topicInput.value.trim() || "実用的でシンプルな木工作品";
-            const matType = matTypeInput.value; // 'board' or 'timber'
-            const matName = matType === 'timber' ? '角材' : '板材';
-
+            
             if(!apiKey) {
                 alert('APIキーを入力してください');
                 return;
@@ -306,14 +301,13 @@
                 const modelName = await findAvailableModel(apiKey);
                 loadingDetail.innerText = `AI親方が「${userTopic}」を考案中...(${modelName})`;
 
-                // プロンプトの作成（ユーザー入力を反映）
+                // プロンプト：3D表示（アイソメトリック）を強調して依頼
                 const prompt = `
                     あなたは熟練の木工職人です。
-                    ユーザーの手元に【幅${boardW}mm × 高さ${boardH}mm × 厚み${boardD}mm】の${matName}が1枚(1本)あります。
+                    ユーザーの手元に【幅${boardW}mm × 高さ${boardH}mm × 厚み${boardD}mm】の材料（板材または角材）が1つあります。
                     この材料から切り出せる、「${userTopic}」を考案してください。
                     
                     【条件】
-                    - 材料は${matName}です。${matName === 'timber' ? '線材として長さを切り出すイメージで設計してください。' : '面材として切り出すイメージで設計してください。'}
                     - 複雑な曲線カットは無し。直線カットのみ。
                     - 部材の合計面積（長さ）が、材料の90%以下になるようにすること。
                     - 出力は必ず以下のJSON形式のみで行うこと（Markdown記法は不要）。
@@ -322,10 +316,10 @@
                     {
                         "title": "作品名",
                         "description": "どんな作品か簡潔な説明（30文字程度）",
-                        "svg_icon": "作品の完成形をイメージしたシンプルなSVGコード（<svg viewBox='0 0 100 100'>...</svg>の形式。色はモノクロまたは木の色で）",
+                        "svg_icon": "作品の完成形をイメージした『3Dのアイソメトリック図（鳥観図）』のSVGコード。斜め上から見たアングルで、立体感がわかるように面ごとに色（茶色の濃淡）を変えて描画すること。背景は透明。<svg viewBox='0 0 200 200'>...</svg>の形式。",
                         "parts": [
-                            {"name": "脚", "w": 450, "h": ${matType === 'timber' ? boardH : 100}, "count": 4},
-                            {"name": "座面枠", "w": 300, "h": ${matType === 'timber' ? boardH : 100}, "count": 2}
+                            {"name": "脚", "w": 450, "h": 40, "count": 4},
+                            {"name": "座面", "w": 300, "h": 300, "count": 1}
                         ]
                     }
                 `;
@@ -360,14 +354,10 @@
                     
                     for(let i=0; i<part.count; i++){
                         let fw = part.w, fh = part.h;
-                        // ★自動回転ロジック（改良版）
-                        // 材料が「横長（板）」なら、部材は「縦長」にして並べる（既存ロジック）
-                        // 材料が「角材（Wが非常に長い）」なら、部材もそれに合わせる
+                        // ★自動回転ロジック：材料が横長なら、部材は「縦長」にして並べる（木取り効率化）
                         if (boardW > boardH) {
-                            // 材料が横長なら、部材は縦長（高さ優先）にして詰める
                              if (fw > fh) { [fw, fh] = [fh, fw]; }
                         } else {
-                            // 材料が縦長なら、部材は横長（幅優先）にして詰める
                              if (fh > fw) { [fw, fh] = [fh, fw]; }
                         }
                         allParts.push({ w: fw, h: fh, name: part.name });
@@ -412,8 +402,7 @@
                 ctx.strokeRect(0, 0, renderW, renderH);
 
                 // 配置ロジック
-                // 角材(Wが長い)の場合は、単に横に並べていく
-                parts.sort((a, b) => b.h - a.h); // 基本は高さ順だが...
+                parts.sort((a, b) => b.h - a.h); 
 
                 let currentX = 0;
                 let currentY = 0;
@@ -425,7 +414,6 @@
                 ctx.lineWidth = 2 / scale;
 
                 parts.forEach(part => {
-                    // はみ出し判定
                     if (currentX + part.w > renderW) {
                         currentX = 0;
                         currentY += rowMaxH + KERF;
@@ -436,13 +424,11 @@
                         return; 
                     }
                     
-                    // 描画
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(currentX, currentY, part.w, part.h);
                     ctx.strokeRect(currentX, currentY, part.w, part.h);
                     
                     ctx.fillStyle = '#333';
-                    // 文字表示判定（小さすぎるときは表示しない）
                     if(part.w * scale > 20 && part.h * scale > 10) {
                         ctx.fillText(part.name, currentX + 5, currentY + (part.h/2) + 4);
                     }
