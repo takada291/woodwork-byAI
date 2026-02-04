@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI木工</title>
+    <title>AI木工 - DIY設計図自動生成</title>
     <script type="importmap">
       {
         "imports": {
@@ -43,13 +43,21 @@
         .input-group {
             margin-bottom: 15px;
         }
+        .input-row {
+            display: flex;
+            gap: 15px;
+        }
+        .input-row > div {
+            flex: 1;
+        }
         label {
             display: block;
             font-weight: bold;
             margin-bottom: 5px;
             color: var(--wood-dark);
+            font-size: 0.9rem;
         }
-        input[type="number"], input[type="text"], input[type="password"] {
+        input[type="number"], input[type="text"], input[type="password"], select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
@@ -68,6 +76,7 @@
             font-weight: bold;
             cursor: pointer;
             transition: background 0.3s;
+            margin-top: 10px;
         }
         .btn-generate:hover {
             background-color: #256d44;
@@ -130,6 +139,7 @@
             font-weight: bold;
             color: var(--accent);
             display: none;
+            margin-top: 20px;
         }
         .api-note {
             font-size: 0.8rem;
@@ -150,13 +160,12 @@
 <body>
 
     <div class="container">
-        <h1>AI木工v0.1</h1>
-        <p>手元の板サイズを入力すると、AIが「作れる木工」を提案します。</p>
+        <h1>AI木工 v0.2</h1>
+        <p>作りたいものと材料を入力すると、AIが設計図と木取り図を提案します。</p>
 
         <div class="api-note">
             <strong>⚠️ APIキーが必要です</strong><br>
-            このアプリはGoogle Gemini APIを使用します。<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で無料のAPIキーを取得し、以下に入力してください。<br>
-            ※キーはブラウザ内にのみ保存されます。
+            Google Gemini APIキーを入力してください（ブラウザ内にのみ保存されます）。
         </div>
 
         <div class="input-group">
@@ -165,15 +174,36 @@
         </div>
 
         <div class="input-group">
-            <label>板の幅 (mm)</label>
-            <input type="number" id="board-w" value="1820">
+            <label>作りたいもの（例：子供用の椅子、本棚、おまかせ）</label>
+            <input type="text" id="user-topic" placeholder="例：頑丈な踏み台">
         </div>
-        <div class="input-group">
-            <label>板の高さ (mm)</label>
-            <input type="number" id="board-h" value="910">
+
+        <div class="input-row">
+            <div class="input-group">
+                <label>材料の種類</label>
+                <select id="material-type">
+                    <option value="board">板材 (合板など)</option>
+                    <option value="timber">角材 (2x4など)</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>材料の厚み (mm)</label>
+                <input type="number" id="board-d" value="12">
+            </div>
+        </div>
+
+        <div class="input-row">
+            <div class="input-group">
+                <label>材料の幅/長さ (mm)</label>
+                <input type="number" id="board-w" value="1820" placeholder="長い方の寸法">
+            </div>
+            <div class="input-group">
+                <label>材料の高さ/巾 (mm)</label>
+                <input type="number" id="board-h" value="910" placeholder="短い方の寸法">
+            </div>
         </div>
         
-        <button class="btn-generate" id="btn-run">AIにアイデアを考えてもらう 🪄</button>
+        <button class="btn-generate" id="btn-run">AI親方に相談する 🪄</button>
         
         <div class="loading" id="loading-msg">
             🔨 AI親方が設計中...<br>
@@ -185,7 +215,7 @@
                 <h2 class="project-title" id="out-title"></h2>
                 <p id="out-desc"></p>
                 
-                <h3>📷 完成イメージ（ポンチ絵）</h3>
+                <h3>📷 完成イメージ</h3>
                 <div class="svg-container" id="out-svg"></div>
 
                 <h3>📋 部材リスト</h3>
@@ -201,8 +231,8 @@
                     <tbody></tbody>
                 </table>
 
-                <h3>📐 簡易木取り図（イメージ）</h3>
-                <p style="font-size:0.9rem;">※赤線はカットライン。簡易計算のため、「板の木取」アプリより精度は劣ります。</p>
+                <h3>📐 簡易木取り図</h3>
+                <p style="font-size:0.9rem;">※赤線はカットライン。簡易計算のため精度は目安です。</p>
                 <canvas id="layout-canvas"></canvas>
             </div>
         </div>
@@ -216,11 +246,16 @@
         const loadingDetail = document.getElementById('loading-detail');
         const resultArea = document.getElementById('result-area');
         const apiKeyInput = document.getElementById('api-key');
+        
+        // 入力項目の取得
+        const topicInput = document.getElementById('user-topic');
+        const matTypeInput = document.getElementById('material-type');
+        const depthInput = document.getElementById('board-d');
 
         const savedKey = localStorage.getItem('gemini_api_key');
         if(savedKey) apiKeyInput.value = savedKey;
 
-        // ★修正版：使えるモデルを慎重に選ぶ関数
+        // モデル自動検出（安定版）
         async function findAvailableModel(apiKey) {
             try {
                 loadingDetail.innerText = "最適なAIモデルを探しています...";
@@ -230,26 +265,21 @@
                 const data = await response.json();
                 const models = data.models || [];
 
-                // 2.0系はまだ不安定（無料枠でエラーが出る）なので除外して探します
                 const capableModels = models.filter(m => 
                     m.supportedGenerationMethods && 
                     m.supportedGenerationMethods.includes("generateContent") &&
-                    !m.name.includes("gemini-2.0") // ★ここがミソ！2.0を除外
+                    !m.name.includes("gemini-2.0") 
                 );
 
-                // 優先順位: 1.5-flash > 1.5-pro > その他
                 let bestModel = capableModels.find(m => m.name.includes("gemini-1.5-flash"));
                 if (!bestModel) bestModel = capableModels.find(m => m.name.includes("gemini-1.5-pro"));
                 if (!bestModel && capableModels.length > 0) bestModel = capableModels[0];
 
-                if (bestModel) {
-                    return bestModel.name.replace("models/", "");
-                }
-                // 見つからなければ安全策として1.5-flashを強制指定
+                if (bestModel) return bestModel.name.replace("models/", "");
                 return "gemini-1.5-flash";
             } catch (e) {
                 console.warn("モデル自動検出失敗:", e);
-                return "gemini-1.5-flash"; // フォールバック
+                return "gemini-1.5-flash"; 
             }
         }
 
@@ -257,6 +287,10 @@
             const apiKey = apiKeyInput.value.trim();
             const boardW = parseInt(document.getElementById('board-w').value);
             const boardH = parseInt(document.getElementById('board-h').value);
+            const boardD = parseInt(depthInput.value);
+            const userTopic = topicInput.value.trim() || "実用的でシンプルな木工作品";
+            const matType = matTypeInput.value; // 'board' or 'timber'
+            const matName = matType === 'timber' ? '角材' : '板材';
 
             if(!apiKey) {
                 alert('APIキーを入力してください');
@@ -269,20 +303,19 @@
             resultArea.style.display = 'none';
 
             try {
-                // 1. モデルの選択
                 const modelName = await findAvailableModel(apiKey);
-                loadingDetail.innerText = `AIモデル「${modelName}」で設計図を作成中...`;
+                loadingDetail.innerText = `AI親方が「${userTopic}」を考案中...(${modelName})`;
 
-                // 2. プロンプト作成
+                // プロンプトの作成（ユーザー入力を反映）
                 const prompt = `
                     あなたは熟練の木工職人です。
-                    ユーザーの手元に【幅${boardW}mm × 高さ${boardH}mm】の板が1枚あります。
-                    この板1枚から切り出せる、実用的でシンプルな木工作品を1つ考案してください。
+                    ユーザーの手元に【幅${boardW}mm × 高さ${boardH}mm × 厚み${boardD}mm】の${matName}が1枚(1本)あります。
+                    この材料から切り出せる、「${userTopic}」を考案してください。
                     
                     【条件】
+                    - 材料は${matName}です。${matName === 'timber' ? '線材として長さを切り出すイメージで設計してください。' : '面材として切り出すイメージで設計してください。'}
                     - 複雑な曲線カットは無し。直線カットのみ。
-                    - 部材の合計面積が、板の面積の90%以下になるようにすること（切り代や端材を考慮）。
-                    - シェルフ、本立て、プランターカバー、すのこ等といった様々なデザインを考えること。
+                    - 部材の合計面積（長さ）が、材料の90%以下になるようにすること。
                     - 出力は必ず以下のJSON形式のみで行うこと（Markdown記法は不要）。
                     
                     【JSONフォーマット】
@@ -291,13 +324,12 @@
                         "description": "どんな作品か簡潔な説明（30文字程度）",
                         "svg_icon": "作品の完成形をイメージしたシンプルなSVGコード（<svg viewBox='0 0 100 100'>...</svg>の形式。色はモノクロまたは木の色で）",
                         "parts": [
-                            {"name": "側板", "w": 200, "h": 500, "count": 2},
-                            {"name": "棚板", "w": 200, "h": 300, "count": 3}
+                            {"name": "脚", "w": 450, "h": ${matType === 'timber' ? boardH : 100}, "count": 4},
+                            {"name": "座面枠", "w": 300, "h": ${matType === 'timber' ? boardH : 100}, "count": 2}
                         ]
                     }
                 `;
 
-                // 3. Gemini API呼び出し
                 const genAI = new GoogleGenerativeAI(apiKey);
                 const model = genAI.getGenerativeModel({ model: modelName });
 
@@ -308,7 +340,7 @@
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const data = JSON.parse(text);
 
-                // 4. 結果の表示
+                // 結果表示
                 document.getElementById('out-title').innerText = data.title;
                 document.getElementById('out-desc').innerText = data.description;
                 document.getElementById('out-svg').innerHTML = data.svg_icon;
@@ -325,12 +357,19 @@
                         <td>${part.count}</td>
                     </tr>`;
                     tbody.innerHTML += row;
-                    // 木取り計算用に展開
+                    
                     for(let i=0; i<part.count; i++){
-                        // ★追加：詰め込みやすくするため、自動で「縦長」に回転させる！
                         let fw = part.w, fh = part.h;
-                        if (fw > fh) { [fw, fh] = [fh, fw]; } // 幅の方が広ければ入れ替え
-
+                        // ★自動回転ロジック（改良版）
+                        // 材料が「横長（板）」なら、部材は「縦長」にして並べる（既存ロジック）
+                        // 材料が「角材（Wが非常に長い）」なら、部材もそれに合わせる
+                        if (boardW > boardH) {
+                            // 材料が横長なら、部材は縦長（高さ優先）にして詰める
+                             if (fw > fh) { [fw, fh] = [fh, fw]; }
+                        } else {
+                            // 材料が縦長なら、部材は横長（幅優先）にして詰める
+                             if (fh > fw) { [fw, fh] = [fh, fw]; }
+                        }
                         allParts.push({ w: fw, h: fh, name: part.name });
                     }
                 });
@@ -340,7 +379,7 @@
                 
             } catch (error) {
                 console.error(error);
-                alert('エラーが発生しました: ' + error.message + '\n\nAPIキーが正しいか、Google AI Studioで有効か確認してください。');
+                alert('エラーが発生しました: ' + error.message);
             } finally {
                 btn.disabled = false;
                 loading.style.display = 'none';
@@ -352,21 +391,29 @@
             const canvas = document.getElementById('layout-canvas');
             if(canvas.parentElement && canvas.parentElement.clientWidth){
                 const maxDisplayWidth = canvas.parentElement.clientWidth;
-                const scale = maxDisplayWidth / boardW;
+                // アスペクト比が極端な場合（長い角材など）の表示対策
+                let renderW = boardW;
+                let renderH = boardH;
                 
-                canvas.width = boardW * scale;
-                canvas.height = boardH * scale;
+                // 表示用スケール計算
+                const scale = maxDisplayWidth / renderW;
+                
+                // 角材などで細長くなりすぎる場合、キャンバス高さを制限
+                canvas.width = renderW * scale;
+                canvas.height = Math.max(renderH * scale, 50); // 最低50px確保
                 
                 const ctx = canvas.getContext('2d');
                 ctx.scale(scale, scale);
 
                 ctx.fillStyle = '#f0e6d2';
-                ctx.fillRect(0, 0, boardW, boardH);
+                ctx.fillRect(0, 0, renderW, renderH);
                 ctx.strokeStyle = '#8c5e3c';
                 ctx.lineWidth = 2 / scale;
-                ctx.strokeRect(0, 0, boardW, boardH);
+                ctx.strokeRect(0, 0, renderW, renderH);
 
-                parts.sort((a, b) => b.h - a.h);
+                // 配置ロジック
+                // 角材(Wが長い)の場合は、単に横に並べていく
+                parts.sort((a, b) => b.h - a.h); // 基本は高さ順だが...
 
                 let currentX = 0;
                 let currentY = 0;
@@ -378,22 +425,28 @@
                 ctx.lineWidth = 2 / scale;
 
                 parts.forEach(part => {
-                    if (currentX + part.w > boardW) {
+                    // はみ出し判定
+                    if (currentX + part.w > renderW) {
                         currentX = 0;
                         currentY += rowMaxH + KERF;
                         rowMaxH = 0;
                     }
-                    if (currentY + part.h > boardH) {
+                    if (currentY + part.h > renderH) {
                         console.log("配置不可:", part.name);
                         return; 
                     }
+                    
+                    // 描画
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(currentX, currentY, part.w, part.h);
                     ctx.strokeRect(currentX, currentY, part.w, part.h);
+                    
                     ctx.fillStyle = '#333';
-                    if(part.w > 50 && part.h > 20) {
-                    ctx.fillText(part.name, currentX + 5, currentY + 20);
+                    // 文字表示判定（小さすぎるときは表示しない）
+                    if(part.w * scale > 20 && part.h * scale > 10) {
+                        ctx.fillText(part.name, currentX + 5, currentY + (part.h/2) + 4);
                     }
+
                     currentX += part.w + KERF;
                     if (part.h > rowMaxH) rowMaxH = part.h;
                 });
@@ -402,10 +455,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
