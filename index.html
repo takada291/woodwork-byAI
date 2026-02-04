@@ -105,7 +105,7 @@
         .svg-container {
             text-align: center;
             margin: 20px 0;
-            background: #fff; /* 背景白で見やすく */
+            background: #fff;
             padding: 20px;
             border: 1px solid #eee;
             min-height: 200px;
@@ -117,7 +117,7 @@
             max-width: 100%;
             height: auto;
             max-height: 350px;
-            filter: drop-shadow(5px 5px 5px rgba(0,0,0,0.1)); /* 影をつけて立体感アップ */
+            filter: drop-shadow(5px 5px 5px rgba(0,0,0,0.1));
         }
         table {
             width: 100%;
@@ -165,7 +165,7 @@
 <body>
 
     <div class="container">
-        <h1>AI木工 v0.3</h1>
+        <h1>AI木工 v0.3.1</h1>
         <p>作りたいものと材料を入力すると、AIが3Dイメージ図と木取り図を提案します。</p>
 
         <div class="api-note">
@@ -284,7 +284,7 @@
             const apiKey = apiKeyInput.value.trim();
             const boardW = parseInt(document.getElementById('board-w').value);
             const boardH = parseInt(document.getElementById('board-h').value);
-            const boardD = parseInt(depthInput.value) || 12; // 未入力なら12mm
+            const boardD = parseInt(depthInput.value) || 12;
             const userTopic = topicInput.value.trim() || "実用的でシンプルな木工作品";
             
             if(!apiKey) {
@@ -301,7 +301,7 @@
                 const modelName = await findAvailableModel(apiKey);
                 loadingDetail.innerText = `AI親方が「${userTopic}」を考案中...(${modelName})`;
 
-                // プロンプト：3D表示（アイソメトリック）を強調して依頼
+                // ★ここを修正：SVG内でのダブルクォート使用を禁止する指示を追加
                 const prompt = `
                     あなたは熟練の木工職人です。
                     ユーザーの手元に【幅${boardW}mm × 高さ${boardH}mm × 厚み${boardD}mm】の材料（板材または角材）が1つあります。
@@ -312,11 +312,17 @@
                     - 部材の合計面積（長さ）が、材料の90%以下になるようにすること。
                     - 出力は必ず以下のJSON形式のみで行うこと（Markdown記法は不要）。
                     
+                    【重要：SVG作成のルール】
+                    - JSONエラーを防ぐため、SVGコード内の属性は『必ずシングルクォート(')』を使用し、ダブルクォート(")は絶対に使用しないこと。
+                    - 例：<svg viewBox='0 0 100 100' ...>
+                    - 作品の完成形をイメージした『3Dのアイソメトリック図（鳥観図）』を描くこと。
+                    - 立体感がわかるように面ごとに色（茶色の濃淡 #8c5e3c, #d4a373など）を変えて塗りつぶすこと。
+                    
                     【JSONフォーマット】
                     {
                         "title": "作品名",
                         "description": "どんな作品か簡潔な説明（30文字程度）",
-                        "svg_icon": "作品の完成形をイメージした『3Dのアイソメトリック図（鳥観図）』のSVGコード。斜め上から見たアングルで、立体感がわかるように面ごとに色（茶色の濃淡）を変えて描画すること。背景は透明。<svg viewBox='0 0 200 200'>...</svg>の形式。",
+                        "svg_icon": "<svg viewBox='0 0 200 200'>...</svg>",
                         "parts": [
                             {"name": "脚", "w": 450, "h": 40, "count": 4},
                             {"name": "座面", "w": 300, "h": 300, "count": 1}
@@ -331,10 +337,12 @@
                 const response = await result.response;
                 let text = response.text();
 
+                // 余計な記号を削除
                 text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                
+                // パース実行
                 const data = JSON.parse(text);
 
-                // 結果表示
                 document.getElementById('out-title').innerText = data.title;
                 document.getElementById('out-desc').innerText = data.description;
                 document.getElementById('out-svg').innerHTML = data.svg_icon;
@@ -354,7 +362,6 @@
                     
                     for(let i=0; i<part.count; i++){
                         let fw = part.w, fh = part.h;
-                        // ★自動回転ロジック：材料が横長なら、部材は「縦長」にして並べる（木取り効率化）
                         if (boardW > boardH) {
                              if (fw > fh) { [fw, fh] = [fh, fw]; }
                         } else {
@@ -369,28 +376,28 @@
                 
             } catch (error) {
                 console.error(error);
-                alert('エラーが発生しました: ' + error.message);
+                // エラー内容を少し優しく表示
+                if(error.message.includes("JSON")) {
+                     alert('AI親方が図面の書き方を間違えました（JSONエラー）。\nもう一度ボタンを押してみてください！');
+                } else {
+                     alert('エラーが発生しました: ' + error.message);
+                }
             } finally {
                 btn.disabled = false;
                 loading.style.display = 'none';
             }
         });
 
-        // 簡易木取り描画
         function drawLayout(boardW, boardH, parts) {
             const canvas = document.getElementById('layout-canvas');
             if(canvas.parentElement && canvas.parentElement.clientWidth){
                 const maxDisplayWidth = canvas.parentElement.clientWidth;
-                // アスペクト比が極端な場合（長い角材など）の表示対策
                 let renderW = boardW;
                 let renderH = boardH;
-                
-                // 表示用スケール計算
                 const scale = maxDisplayWidth / renderW;
                 
-                // 角材などで細長くなりすぎる場合、キャンバス高さを制限
                 canvas.width = renderW * scale;
-                canvas.height = Math.max(renderH * scale, 50); // 最低50px確保
+                canvas.height = Math.max(renderH * scale, 50);
                 
                 const ctx = canvas.getContext('2d');
                 ctx.scale(scale, scale);
@@ -401,7 +408,6 @@
                 ctx.lineWidth = 2 / scale;
                 ctx.strokeRect(0, 0, renderW, renderH);
 
-                // 配置ロジック
                 parts.sort((a, b) => b.h - a.h); 
 
                 let currentX = 0;
@@ -420,7 +426,6 @@
                         rowMaxH = 0;
                     }
                     if (currentY + part.h > renderH) {
-                        console.log("配置不可:", part.name);
                         return; 
                     }
                     
