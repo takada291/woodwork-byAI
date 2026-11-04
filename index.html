@@ -195,7 +195,7 @@
 <body>
 
     <div class="container">
-        <h1>AI木工 v1.2</h1>
+        <h1>AI木工 v1.3</h1>
         <p>作りたいものと材料を入力すると、AIが3Dイメージ図と木取り図を自動設計します。</p>
 
         <div class="api-note">
@@ -242,7 +242,7 @@
 
         <div id="export-buttons">
             <button class="btn-export-pdf" onclick="window.print()">🖨️ PDF保存 / 印刷</button>
-            <button class="btn-export-word" id="btn-word-export">📝 Word出力 (.doc)</button>
+            <button class="btn-export-word" onclick="exportToWord()">📝 Word出力 (.doc)</button>
         </div>
 
         <div id="result-area">
@@ -274,11 +274,9 @@
         </div>
     </div>
 
-    <script type="module">
-        import { GoogleGenerativeAI } from "@google/generative-ai";
-
+    <!-- モジュール読み込みを廃止し、標準のスクリプトとして動作させます -->
+    <script>
         const btn = document.getElementById('btn-run');
-        const btnWordExport = document.getElementById('btn-word-export');
         const loading = document.getElementById('loading-msg');
         const loadingDetail = document.getElementById('loading-detail');
         const resultArea = document.getElementById('result-area');
@@ -510,8 +508,8 @@
             }
         }
 
-        // SVGをCanvas経由で画像化してからWordを出力する関数
-        btnWordExport.addEventListener('click', async () => {
+        // SVGを画像化してからWordへ出力する処理
+        async function exportToWord() {
             const title = document.getElementById('out-title').innerText;
             const desc = document.getElementById('out-desc').innerText;
             const svgEl = document.querySelector('#out-svg svg');
@@ -521,8 +519,8 @@
                 alert("先に出力データを生成してください。");
                 return;
             }
-            
-            // 1. SVGを画像（PNG形式）に変換（Word対応用）
+
+            // 1. SVGをPNGに変換
             const svgData = new XMLSerializer().serializeToString(svgEl);
             const svgUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
             
@@ -536,7 +534,6 @@
             });
             
             const svgCanvas = document.createElement('canvas');
-            // SVGのviewBoxからサイズを取得（標準は300px）
             let width = 300, height = 300;
             const viewBox = svgEl.getAttribute('viewBox');
             if (viewBox) {
@@ -549,7 +546,6 @@
             svgCanvas.width = width;
             svgCanvas.height = height;
             const svgCtx = svgCanvas.getContext('2d');
-            // Word内で透過背景が黒くなるのを防ぐため、背景を白に塗る
             svgCtx.fillStyle = '#ffffff';
             svgCtx.fillRect(0, 0, width, height);
             svgCtx.drawImage(svgImage, 0, 0, width, height);
@@ -559,7 +555,7 @@
             // 2. 簡易木取り図（Canvas）を画像化
             const canvasBase64 = canvasEl.toDataURL('image/jpeg', 0.9);
             
-            // テーブルHTMLの取得
+            // 3. テーブルHTMLの取得
             const tableHtml = document.getElementById('parts-table').outerHTML;
             const now = new Date();
             const dateStr = now.toLocaleDateString('ja-JP');
@@ -587,7 +583,6 @@
     
     <h3>完成イメージ</h3>
     <div style="text-align: center;">
-        <!-- SVGの代わりに画像化したデータを埋め込む -->
         <img src="${svgRasterBase64}" style="max-width: 300px; height: auto;">
     </div>
 
@@ -610,7 +605,7 @@
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-        });
+        }
     </script>
 </body>
 </html>
