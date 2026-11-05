@@ -289,7 +289,7 @@
         const savedKey = localStorage.getItem('gemini_api_key_wood');
         if(savedKey) apiKeyInput.value = savedKey;
 
-        const MODEL_CANDIDATES = ["gemini-3.6-flash", "gemini-2.5-flash"];
+        const MODEL_CANDIDATES = ["gemini-3.8-flash", "gemini-3.6-flash"];
         let lastUsedModel = "";
 
         async function fetchWithTimeout(url, options, timeoutMs = 45000) {
